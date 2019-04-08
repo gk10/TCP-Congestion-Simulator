@@ -4,9 +4,17 @@ public class Connector {
 
 	public int totalPackets;
 
+	public static int ssthresh = 32;
+
+	public static boolean slowStart = true;
+
+	public static ArrayList<Packet> sPackets = new ArrayList<Packet>();
+	public static ArrayList<Packet> cPackets = new ArrayList<Packet>();
+
 	public static void main(String[] args) {
 
 		Scanner sc = new Scanner(System.in);
+		int dupAckCounter = 0;
 
 		System.out.println("Enter amount of data (bytes)");
 		int data = sc.nextInt();
@@ -14,46 +22,45 @@ public class Connector {
 		int time = sc.nextInt();
 		System.out.println("Enter MSS (bytes)");
 		int mss = sc.nextInt();
-		
-		int packs =50;
-		System.out.println("# of packets: " + packs);
-		Packet[] packets = new Packet[packs+2];
-		for (int i = 0; i < packets.length; i++) {
-			packets[i] = new Packet();
-			if(data - mss > 0) {
-			packets[i].setData(mss);
-			data -= mss;
-			}else {
-				packets[i].setData(data);
-			}
-		}
-		threeWayHS(packets);
-		
-		for (int i = 0; i < packets.length; i++) {
-			
-			System.out.println(
-					"PACKET # " + i +" : ESTABLISHING CONNECTION: " + "SEQ: " + packets[i].getSeqNum() + " ACK:" + packets[i].getackNum() + " DATA: " + packets[i].getData());
-			if(i > 2) {
-				transferData(packets, i-1);
-			}
-		}
+		System.out.println("Enter probability of packet loss:");
+		float ploss = sc.nextFloat();
 
+		threeWayHS();
+		toServer(cPackets.get(cPackets.size() - 1));
+		toClient();
+		toServer(cPackets.get(cPackets.size() - 1));
+		toClient();
+		toServer(cPackets.get(cPackets.size() - 1));
+		toClient();
+		try {
+			for (int i = 0; i < cPackets.size(); i++) {
+				System.out.println(
+						"CLIENT - SEQ: " + cPackets.get(i).getSeqNum() + " ACK " + cPackets.get(i).getackNum());
+				System.out.println(
+						"SERVER - SEQ: " + sPackets.get(i).getSeqNum() + " ACK " + sPackets.get(i).getackNum());
+			}
+		} catch (Exception e) {
+			System.out.println("No more packets!");
+		}
 	}
 
-	public static void threeWayHS(Packet packet[]) {
+	public static void threeWayHS() {
 		Random ran = new Random();
-		
 		Packet sPacket = new Packet();
-		
-		packet[0].setSeqNum(ran.nextInt(99999));
+		Packet c1 = new Packet();
+		c1.setSeqNum(ran.nextInt(99999));
+		cPackets.add(c1);
+		Packet s1 = new Packet();
 		// syn-ack; these are server packets, so may need to separate from array of
 		// 'total packets'
-		packet[1].setAcknum(packet[0].getSeqNum() + 1);
-		packet[1].setSeqNum(0);
+		s1.setAcknum(cPackets.get(cPackets.size() - 1).getSeqNum() + 1);
+		s1.setSeqNum(0);
+		sPackets.add(s1);
 		// ack
-		packet[2].setAcknum(packet[1].getSeqNum() + 1);
-		packet[2].setSeqNum(packet[1].getackNum() + 1);
-		System.out.println("Syn Ack: " + "SEQ: " + sPacket.getSeqNum() + " ACK: " + sPacket.getackNum() );
+		Packet c2 = new Packet();
+		c2.setAcknum(s1.getSeqNum() + 1);
+		c2.setSeqNum(s1.getackNum());
+		cPackets.add(c2);
 	}
 
 	/**
@@ -63,36 +70,23 @@ public class Connector {
 	 * @param i
 	 *            index of packet from array
 	 */
-	public static void transferData(Packet packet[], int i) {
-		// server packet, probably will have to update away from 'total packets'
-		if (packet[i] != null) {
-			
-			// pseudo 'server' response packet
-			Packet sPacket = new Packet();
-			
-			// client variables
-			int cSeq = packet[i].getSeqNum();
-			int cAck = packet[i].getackNum();
-			float cData = packet[i].getData();
-			
-			// set 'server packet' ack and seq
-			packet[i+1].setSeqNum(cAck);
-			packet[i+1].setAcknum((int) (cSeq + cData));
-			
-			// future client packet variables
-			int cSeq2 = packet[i+2].getSeqNum();
-			int cAck2 = packet[i+2].getackNum();
-			
-			// update what next client packet should look like
-			packet[i+2].setSeqNum(packet[i+1].getackNum());
-			packet[i+2].setAcknum(packet[i+1].getSeqNum());
+	public static void toServer(Packet packet) {
+		Packet sPacket = new Packet();
+		sPacket.setSeqNum(packet.getackNum());
+		sPacket.setAcknum((int) (packet.getSeqNum() + packet.getData()));
+		sPackets.add(sPacket);
+	}
 
-			
-		} else {
-			System.out.println("no more packets!");
-			System.exit(0);
-		}
-
+	/**
+	 * Send the latest packet from the server back to the client
+	 */
+	public static void toClient() {
+		Packet sPacket = sPackets.get(sPackets.size() - 1);
+		Packet cPacket = new Packet();
+		cPacket.setAcknum(sPacket.getSeqNum());
+		cPacket.setSeqNum(sPacket.getackNum());
+		cPacket.setData(10);
+		cPackets.add(cPacket);
 	}
 
 }

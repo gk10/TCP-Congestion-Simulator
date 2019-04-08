@@ -1,4 +1,3 @@
-
 public class Packet {
 	private int seqNum=0;
 	private int acknum=0;
