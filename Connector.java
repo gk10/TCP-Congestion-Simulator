@@ -6,12 +6,19 @@ public class Connector {
 
 	public int totalPackets;
 
-	public static int ssthresh = 32;
-
+	public static float ssthresh = 32;
+	public static float cwnd;
+	public static int nLost = 0;
 	public static boolean slowStart = true;
 
 	public static ArrayList<Packet> sPackets = new ArrayList<Packet>();
 	public static ArrayList<Packet> cPackets = new ArrayList<Packet>();
+	public static ArrayList<Float> times = new ArrayList<Float>();
+	public static float pubData;
+	public static float pubMSS;
+	public static float pubProb;
+	public static float pubTime;
+	public static float totalLost = 0;
 
 	public static void main(String[] args) {
 
@@ -20,28 +27,39 @@ public class Connector {
 
 		System.out.println("Enter amount of data (bytes)");
 		int data = sc.nextInt();
-		System.out.println("Enter latency (ms)");
+		pubData = data;
+		System.out.println("Enter average time between messages (ms)");
 		int time = sc.nextInt();
+		pubTime = time;
 		System.out.println("Enter MSS (bytes)");
 		int mss = sc.nextInt();
+		pubMSS = mss;
 		System.out.println("Enter probability of packet loss:");
 		float ploss = sc.nextFloat();
+		pubProb = ploss;
 
+		// initiate connection
 		threeWayHS();
-		toServer(cPackets.get(cPackets.size() - 1));
-		toClient();
-		toServer(cPackets.get(cPackets.size() - 1));
-		toClient();
-		toServer(cPackets.get(cPackets.size() - 1));
-		toClient();
+
+		// start slow start
+		sStart();
+//		congestionAvoidance();
+
+		// the final packet
+		toServer(cPackets.get(cPackets.size() - 1), pubProb);
+		toClient(pubData);
+
+		System.out.println("DATA LEFT " + pubData);
 		try {
 			for (int i = 0; i < cPackets.size(); i++) {
-				clientDuplicateAck(ploss, i);
-				serverDuplicateAck(ploss, i);
-				
+				System.out.println(
+						"CLIENT - SEQ: " + cPackets.get(i).getSeqNum() + " ACK " + cPackets.get(i).getackNum());
+				System.out.println(
+						"SERVER - SEQ: " + sPackets.get(i).getSeqNum() + " ACK " + sPackets.get(i).getackNum());
 			}
 		} catch (Exception e) {
 			System.out.println("No more packets!");
+			System.out.println("CWND: " + cwnd);
 		}
 	}
 
@@ -50,16 +68,17 @@ public class Connector {
 		Packet sPacket = new Packet();
 		Packet c1 = new Packet();
 		c1.setSeqNum(ran.nextInt(99999));
+		c1.setAcknum(ran.nextInt(99999));
 		cPackets.add(c1);
 		Packet s1 = new Packet();
 		// syn-ack; these are server packets, so may need to separate from array of
 		// 'total packets'
 		s1.setAcknum(cPackets.get(cPackets.size() - 1).getSeqNum() + 1);
-		s1.setSeqNum(0);
+		s1.setSeqNum(c1.getackNum());
 		sPackets.add(s1);
 		// ack
 		Packet c2 = new Packet();
-		c2.setAcknum(s1.getSeqNum() + 1);
+		c2.setAcknum(s1.getSeqNum()+1);
 		c2.setSeqNum(s1.getackNum());
 		cPackets.add(c2);
 	}
@@ -67,86 +86,106 @@ public class Connector {
 	/**
 	 * 
 	 * @param packet
-	 *            array of all packets
-	 * @param i
-	 *            index of packet from array
+	 *            Packet you would like to send to server
 	 */
-	public static void toServer(Packet packet) {
-		
-		Packet sPacket = new Packet();
-		sPacket.setSeqNum(packet.getackNum());
-		sPacket.setAcknum((int) (packet.getSeqNum() + packet.getData()));
-		sPackets.add(sPacket);
+	public static void toServer(Packet packet, float pSuccess) {
+		System.out.println("num lost: " + nLost);
+		// send successful packet back if not lost and reset lost counter if works
+		if (isLost(pSuccess) == false && nLost < 3) {
+			Packet sPacket = new Packet();
+			sPacket.setSeqNum(packet.getackNum());
+			sPacket.setAcknum((int) (packet.getSeqNum() + packet.getData()));
+			sPackets.add(sPacket);
+			nLost = 0;
+			System.out.println("RESET");
+			// server will send back dupe acks 3 times
+		} else if (nLost <= 3 && nLost > 0) {
+			System.out.println("dupe ack");
+			sPackets.add(sPackets.get(sPackets.size() - 1));
+
+		}
 	}
 
 	/**
 	 * Send the latest packet from the server back to the client
 	 */
-	public static void toClient() {
+	public static void toClient(float pubData2) {
+
 		Packet sPacket = sPackets.get(sPackets.size() - 1);
 		Packet cPacket = new Packet();
-		cPacket.setAcknum(sPacket.getSeqNum());
+		cPacket.setData(pubData2);
+		cPacket.setAcknum(sPacket.getSeqNum() + 4);
 		cPacket.setSeqNum(sPacket.getackNum());
-		cPacket.setData(10);
 		cPackets.add(cPacket);
+
 	}
-	
-	public static void clientDuplicateAck(double ploss, int i) {
-		int display = 0;
-		int dupAckCounter = 0;
-		Random rand = new Random();
-		int low = 0;
-		int high = 100;
-		int result = rand.nextInt(high - low) + low;
-		
-		while(result <= ploss * 100) {
-			//System.out.println("Packet Lost");
-			System.out.println("CLIENT - SEQ: " + cPackets.get(i).getSeqNum() + " ACK " + cPackets.get(i).getackNum());
-			result = rand.nextInt(high - low) + low;
-			dupAckCounter++;
-			display++;
-			
-			if(dupAckCounter == 3) {
-				System.out.println("Begin Congestion Avoidance");
-				break;
+
+	/**
+	 * Decide if a packet will be lost
+	 * 
+	 * @param prob
+	 *            chance packet will be lost
+	 * @return if true, packet is lost; else packet isn't lost
+	 */
+	public static boolean isLost(float prob) {
+		Random ran = new Random();
+		int random = ran.nextInt(99) + 1;
+		prob = prob * 100;
+		System.out.println("PROB: " + prob + " RANDOM: " + random);
+		if (prob > random) {
+			nLost++;
+			totalLost++;
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	/**
+	 * Slow Start phase i is acting as cwnd should double after each RTT, so time
+	 * should prob go here
+	 */
+	public static void sStart() {
+		if (slowStart == true) {
+			int i = 1;
+			while (i < ssthresh && slowStart == true && nLost < 3 && pubData > pubMSS) {
+				System.out.println("I" + i);
+				int itemp = i * 2;
+				for (int j = i; j < itemp; j++) {
+					if (pubData - pubMSS > 0) {
+						toServer(cPackets.get(cPackets.size() - 1), pubProb);
+						toClient(pubMSS);
+						pubData = pubData - pubMSS;
+						pubTime += pubTime;
+						// send second to last packet
+					} else {
+						toServer(cPackets.get(cPackets.size() - 1), pubProb);
+						toClient(pubData);
+						pubTime += pubTime;
+						break;
+					}
+				}
+				i = itemp;
 			}
+			cwnd = i;
 		}
-		
-		//dupAckCounter = 0;
-		
-		if(result > ploss && display != 2) {
-		System.out.println(
-				"CLIENT - SEQ: " + cPackets.get(i).getSeqNum() + " ACK " + cPackets.get(i).getackNum());
+		if (cwnd > ssthresh || nLost >= 3) {
+			ssthresh = cwnd / 2;
+			slowStart = false;
+			cwnd = 1;
 		}
 	}
-	
-	public static void serverDuplicateAck(double ploss, int i) {
-		Random rand = new Random();
-		int dupAckCounter = 0;
-		int display = 0;
-		int low = 0;
-		int high = 100;
-		int result = rand.nextInt(high - low) + low;
-		
-		while(result <= ploss * 100) {
-			//System.out.println("Packet Lost");
-			System.out.println("SERVER - SEQ: " + sPackets.get(i).getSeqNum() + " ACK " + sPackets.get(i).getackNum());
-			result = rand.nextInt(high - low) + low;
-			dupAckCounter++;
-			display++;
-			
-			if(dupAckCounter == 3) {
-				System.out.println("Begin Congestion Avoidance");
-				break;
+
+	public static void congestionAvoidance() {
+		ssthresh = cwnd / 2;
+		slowStart = false;
+		cwnd = 1;
+		while (cwnd < ssthresh) {
+			for(int i = 0; i < cwnd; i++) {
+				
 			}
+			cwnd = (cwnd + 1) / cwnd;
 		}
-		
-		if(result > ploss && display != 2) {
-		
-		System.out.println(
-				"SERVER - SEQ: " + sPackets.get(i).getSeqNum() + " ACK " + sPackets.get(i).getackNum());
 	}
-	}
-	
 
 }
