@@ -36,54 +36,9 @@ public class Connector {
 		toClient();
 		try {
 			for (int i = 0; i < cPackets.size(); i++) {
-				int display = 0;
-				dupAckCounter = 0;
-				Random rand = new Random();
-				int low = 0;
-				int high = 100;
-				int result = rand.nextInt(high - low) + low;
+				clientDuplicateAck(ploss, i);
+				serverDuplicateAck(ploss, i);
 				
-				while(result <= ploss * 100) {
-					//System.out.println("Packet Lost");
-					System.out.println("CLIENT - SEQ: " + cPackets.get(i).getSeqNum() + " ACK " + cPackets.get(i).getackNum());
-					result = rand.nextInt(high - low) + low;
-					dupAckCounter++;
-					display++;
-					
-					if(dupAckCounter == 3) {
-						System.out.println("Begin Congestion Avoidance");
-						break;
-					}
-				}
-				
-				//dupAckCounter = 0;
-				
-				if(result > ploss && display != 2) {
-				System.out.println(
-						"CLIENT - SEQ: " + cPackets.get(i).getSeqNum() + " ACK " + cPackets.get(i).getackNum());
-				}
-				dupAckCounter = 0;
-				display = 0;
-				result = rand.nextInt(high - low) + low;
-				
-				while(result <= ploss * 100) {
-					//System.out.println("Packet Lost");
-					System.out.println("SERVER - SEQ: " + sPackets.get(i).getSeqNum() + " ACK " + sPackets.get(i).getackNum());
-					result = rand.nextInt(high - low) + low;
-					dupAckCounter++;
-					display++;
-					
-					if(dupAckCounter == 3) {
-						System.out.println("Begin Congestion Avoidance");
-						break;
-					}
-				}
-				
-				if(result > ploss && display != 2) {
-				
-				System.out.println(
-						"SERVER - SEQ: " + sPackets.get(i).getSeqNum() + " ACK " + sPackets.get(i).getackNum());
-			}
 			}
 		} catch (Exception e) {
 			System.out.println("No more packets!");
@@ -136,8 +91,62 @@ public class Connector {
 		cPackets.add(cPacket);
 	}
 	
-	public static void duplicateAck() {
+	public static void clientDuplicateAck(double ploss, int i) {
+		int display = 0;
+		int dupAckCounter = 0;
+		Random rand = new Random();
+		int low = 0;
+		int high = 100;
+		int result = rand.nextInt(high - low) + low;
 		
+		while(result <= ploss * 100) {
+			//System.out.println("Packet Lost");
+			System.out.println("CLIENT - SEQ: " + cPackets.get(i).getSeqNum() + " ACK " + cPackets.get(i).getackNum());
+			result = rand.nextInt(high - low) + low;
+			dupAckCounter++;
+			display++;
+			
+			if(dupAckCounter == 3) {
+				System.out.println("Begin Congestion Avoidance");
+				break;
+			}
+		}
+		
+		//dupAckCounter = 0;
+		
+		if(result > ploss && display != 2) {
+		System.out.println(
+				"CLIENT - SEQ: " + cPackets.get(i).getSeqNum() + " ACK " + cPackets.get(i).getackNum());
+		}
 	}
+	
+	public static void serverDuplicateAck(double ploss, int i) {
+		Random rand = new Random();
+		int dupAckCounter = 0;
+		int display = 0;
+		int low = 0;
+		int high = 100;
+		int result = rand.nextInt(high - low) + low;
+		
+		while(result <= ploss * 100) {
+			//System.out.println("Packet Lost");
+			System.out.println("SERVER - SEQ: " + sPackets.get(i).getSeqNum() + " ACK " + sPackets.get(i).getackNum());
+			result = rand.nextInt(high - low) + low;
+			dupAckCounter++;
+			display++;
+			
+			if(dupAckCounter == 3) {
+				System.out.println("Begin Congestion Avoidance");
+				break;
+			}
+		}
+		
+		if(result > ploss && display != 2) {
+		
+		System.out.println(
+				"SERVER - SEQ: " + sPackets.get(i).getSeqNum() + " ACK " + sPackets.get(i).getackNum());
+	}
+	}
+	
 
 }
