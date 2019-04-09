@@ -1,3 +1,5 @@
+package tcpConnection;
+
 import java.util.*;
 
 public class Connector {
@@ -15,8 +17,11 @@ public class Connector {
 	public static float pubData;
 	public static float pubMSS;
 	public static float pubProb;
-	public static float pubTime;
+	public static double pubTime;
+	public static float temp;
+	
 	public static float totalLost = 0;
+	public static int maxCwnd = 50;
 
 	public static void main(String[] args) {
 
@@ -28,7 +33,7 @@ public class Connector {
 		pubData = data;
 		System.out.println("Enter average time between messages (ms)");
 		int time = sc.nextInt();
-		pubTime = time;
+		temp = time;
 		System.out.println("Enter MSS (bytes)");
 		int mss = sc.nextInt();
 		pubMSS = mss;
@@ -41,7 +46,7 @@ public class Connector {
 
 		// start slow start
 		sStart();
-//		congestionAvoidance();
+		// congestionAvoidance();
 
 		// the final packet
 		toServer(cPackets.get(cPackets.size() - 1), pubProb);
@@ -59,6 +64,30 @@ public class Connector {
 			System.out.println("No more packets!");
 			System.out.println("CWND: " + cwnd);
 		}
+	}
+	
+	//approximate time interval based off of assumptions 
+	public static double timeoutInterval(double userRTT) {
+		double[] samples = new double[4];
+		
+		double alpha = .125;
+		double alpha2 = .875;
+		
+		samples[0] = userRTT * alpha2;
+		samples[0] = samples[0] + (alpha * userRTT);
+		
+		double beta = .25;
+		double beta2 = .75;
+		double devRTT = 5;
+		
+		samples[1] = beta2 * devRTT;
+		samples[1] = samples[1] + (.25 * (userRTT - samples[0]));
+		
+		samples[2] = 4 * samples[1];
+		samples[2] = samples[2] + samples[0];
+		
+		double timeoutInterval = samples[2];	
+		return timeoutInterval;
 	}
 
 	public static void threeWayHS() {
@@ -132,6 +161,7 @@ public class Connector {
 		if (prob > random) {
 			nLost++;
 			totalLost++;
+			pubTime += timeoutInterval(pubTime);
 			return true;
 		} else {
 			return false;
@@ -143,46 +173,53 @@ public class Connector {
 	 * should prob go here
 	 */
 	public static void sStart() {
-		if (slowStart == true) {
-			int i = 1;
-			while (i < ssthresh && slowStart == true && nLost < 3 && pubData > pubMSS) {
-				System.out.println("I" + i);
-				int itemp = i * 2;
-				for (int j = i; j < itemp; j++) {
-					if (pubData - pubMSS > 0) {
-						toServer(cPackets.get(cPackets.size() - 1), pubProb);
-						toClient(pubMSS);
-						pubData = pubData - pubMSS;
-						pubTime += pubTime;
-						// send second to last packet
-					} else {
-						toServer(cPackets.get(cPackets.size() - 1), pubProb);
-						toClient(pubData);
-						pubTime += pubTime;
-						break;
-					}
+		int i = 1;
+		while (i < ssthresh && slowStart == true && nLost < 3 && pubData > pubMSS) {
+			System.out.println("I" + i);
+			int itemp = i * 2;
+			for (int j = i; j < itemp; j++) {
+				if (pubData - pubMSS > 0) {
+					toServer(cPackets.get(cPackets.size() - 1), pubProb);
+					toClient(pubMSS);
+					pubData = pubData - pubMSS;
+					pubTime += temp;
+					// send second to last packet
+				} else {
+					toServer(cPackets.get(cPackets.size() - 1), pubProb);
+					toClient(pubData);
+					pubTime += temp;
+					break;
 				}
-				i = itemp;
 			}
-			cwnd = i;
+			i = itemp;
 		}
-		if (cwnd > ssthresh || nLost >= 3) {
-			ssthresh = cwnd / 2;
-			slowStart = false;
-			cwnd = 1;
+		cwnd = i;
+		if (nLost >= 3) {
+			timeOut();
 		}
+		
+	}
+	// if (cwnd > ssthresh || nLost >= 3) {
+	// ssthresh = cwnd / 2;
+	// slowStart = false;
+	// cwnd = 1;
+	// }
+
+	public static void timeOut() {
+		ssthresh = cwnd / 2;
+		slowStart = true;
+		cwnd = 1;
+		nLost = 0;
 	}
 
 	public static void congestionAvoidance() {
-		ssthresh = cwnd / 2;
-		slowStart = false;
-		cwnd = 1;
-		while (cwnd < ssthresh) {
-			for(int i = 0; i < cwnd; i++) {
-				
-			}
-			cwnd = (cwnd + 1) / cwnd;
-		}
-	}
 
+		if (cwnd < ssthresh) {
+			sStart();
+		} else {
+
+		}
+		// cwnd = (cwnd + 1) / cwnd;
+		cwnd++;
+	}
 }
