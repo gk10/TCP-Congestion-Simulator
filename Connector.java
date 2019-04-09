@@ -129,7 +129,7 @@ public class Connector {
 		Random ran = new Random();
 		int random = ran.nextInt(99) + 1;
 		prob = prob * 100;
-		System.out.println("PROB: " + prob + " RANDOM: " + random);
+//		System.out.println("PROB: " + prob + " RANDOM: " + random);
 		if (prob > random) {
 			nLost++;
 			totalLost++;
@@ -146,7 +146,7 @@ public class Connector {
 	public static void sStart() {
 		int i = 1;
 		while (i < ssthresh && slowStart == true && nLost < 3 && pubData > pubMSS) {
-			System.out.println("I" + i);
+//			System.out.println("I" + i);
 			int itemp = i * 2;
 			for (int j = i; j < itemp; j++) {
 				if (pubData - pubMSS > 0) {
@@ -165,11 +165,20 @@ public class Connector {
 			i = itemp;
 		}
 		cwnd = i;
-		if (nLost >= 3) {
+		if (nLost >= 3 || cwnd > ssthresh) {
 			timeOut();
+
 		}
-		
+		if (cwnd == ssthresh) {
+			while (cwnd < maxCwnd) {
+				cwnd += 1 / cwnd;
+				toServer(cPackets.get(cPackets.size() - 1), pubProb);
+				toClient(pubMSS);
+			}
+		}
+		System.out.println(cwnd);
 	}
+
 	// if (cwnd > ssthresh || nLost >= 3) {
 	// ssthresh = cwnd / 2;
 	// slowStart = false;
@@ -181,16 +190,12 @@ public class Connector {
 		slowStart = true;
 		cwnd = 1;
 		nLost = 0;
+		System.out.println("TIME OUT!");
+		sStart();
 	}
 
 	public static void congestionAvoidance() {
+		ssthresh = cwnd / 2;
 
-		if (cwnd < ssthresh) {
-			sStart();
-		} else {
-
-		}
-		// cwnd = (cwnd + 1) / cwnd;
-		cwnd++;
 	}
 }
