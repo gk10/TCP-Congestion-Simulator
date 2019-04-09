@@ -1,5 +1,3 @@
-package tcpConnection;
-
 import java.util.*;
 
 public class Connector {
@@ -19,6 +17,7 @@ public class Connector {
 	public static float pubProb;
 	public static float pubTime;
 	public static float totalLost = 0;
+	public static int maxCwnd = 50;
 
 	public static void main(String[] args) {
 
@@ -43,7 +42,7 @@ public class Connector {
 
 		// start slow start
 		sStart();
-//		congestionAvoidance();
+		// congestionAvoidance();
 
 		// the final packet
 		toServer(cPackets.get(cPackets.size() - 1), pubProb);
@@ -68,17 +67,16 @@ public class Connector {
 		Packet sPacket = new Packet();
 		Packet c1 = new Packet();
 		c1.setSeqNum(ran.nextInt(99999));
-		c1.setAcknum(ran.nextInt(99999));
 		cPackets.add(c1);
 		Packet s1 = new Packet();
 		// syn-ack; these are server packets, so may need to separate from array of
 		// 'total packets'
 		s1.setAcknum(cPackets.get(cPackets.size() - 1).getSeqNum() + 1);
-		s1.setSeqNum(c1.getackNum());
+		s1.setSeqNum(0);
 		sPackets.add(s1);
 		// ack
 		Packet c2 = new Packet();
-		c2.setAcknum(s1.getSeqNum()+1);
+		c2.setAcknum(s1.getSeqNum() + 1);
 		c2.setSeqNum(s1.getackNum());
 		cPackets.add(c2);
 	}
@@ -114,7 +112,7 @@ public class Connector {
 		Packet sPacket = sPackets.get(sPackets.size() - 1);
 		Packet cPacket = new Packet();
 		cPacket.setData(pubData2);
-		cPacket.setAcknum(sPacket.getSeqNum() + 4);
+		cPacket.setAcknum(sPacket.getSeqNum());
 		cPacket.setSeqNum(sPacket.getackNum());
 		cPackets.add(cPacket);
 
@@ -146,46 +144,53 @@ public class Connector {
 	 * should prob go here
 	 */
 	public static void sStart() {
-		if (slowStart == true) {
-			int i = 1;
-			while (i < ssthresh && slowStart == true && nLost < 3 && pubData > pubMSS) {
-				System.out.println("I" + i);
-				int itemp = i * 2;
-				for (int j = i; j < itemp; j++) {
-					if (pubData - pubMSS > 0) {
-						toServer(cPackets.get(cPackets.size() - 1), pubProb);
-						toClient(pubMSS);
-						pubData = pubData - pubMSS;
-						pubTime += pubTime;
-						// send second to last packet
-					} else {
-						toServer(cPackets.get(cPackets.size() - 1), pubProb);
-						toClient(pubData);
-						pubTime += pubTime;
-						break;
-					}
+		int i = 1;
+		while (i < ssthresh && slowStart == true && nLost < 3 && pubData > pubMSS) {
+			System.out.println("I" + i);
+			int itemp = i * 2;
+			for (int j = i; j < itemp; j++) {
+				if (pubData - pubMSS > 0) {
+					toServer(cPackets.get(cPackets.size() - 1), pubProb);
+					toClient(pubMSS);
+					pubData = pubData - pubMSS;
+					pubTime += pubTime;
+					// send second to last packet
+				} else {
+					toServer(cPackets.get(cPackets.size() - 1), pubProb);
+					toClient(pubData);
+					pubTime += pubTime;
+					break;
 				}
-				i = itemp;
 			}
-			cwnd = i;
+			i = itemp;
 		}
-		if (cwnd > ssthresh || nLost >= 3) {
-			ssthresh = cwnd / 2;
-			slowStart = false;
-			cwnd = 1;
+		cwnd = i;
+		if (nLost >= 3) {
+			timeOut();
 		}
+		
+	}
+	// if (cwnd > ssthresh || nLost >= 3) {
+	// ssthresh = cwnd / 2;
+	// slowStart = false;
+	// cwnd = 1;
+	// }
+
+	public static void timeOut() {
+		ssthresh = cwnd / 2;
+		slowStart = true;
+		cwnd = 1;
+		nLost = 0;
 	}
 
 	public static void congestionAvoidance() {
-		ssthresh = cwnd / 2;
-		slowStart = false;
-		cwnd = 1;
-		while (cwnd < ssthresh) {
-			for(int i = 0; i < cwnd; i++) {
-				
-			}
-			cwnd = (cwnd + 1) / cwnd;
-		}
-	}
 
+		if (cwnd < ssthresh) {
+			sStart();
+		} else {
+
+		}
+		// cwnd = (cwnd + 1) / cwnd;
+		cwnd++;
+	}
 }
